@@ -1,7 +1,7 @@
 // RECOMP SETTINGS, MOUSE AND KEYBOARD and CONTROLLER under Shadow Calibration in the options menu. Each opens the
 // Display page (P_Video) with the F10 panel's rows in its list until B: A opens the list of a row's values (an on / off
-// row flips) or rebinds; a range (no list) steps on Left, Right and A. RECOMP SETTINGS first lists its sections (the
-// F10 headings named here) on P_Options itself, drawn as the stock two-bar pages (Solo > Load Game).
+// row flips) or rebinds; a range (no list) steps on Left, Right and A. Each first lists its sections (the F10
+// headings named here) on P_Options itself, drawn as the stock two-bar pages (Solo > Load Game).
 #include <algorithm>
 #include <cctype>
 #include <iterator>
@@ -100,10 +100,23 @@ constexpr uint32_t kRight = 0x27;
 constexpr uint32_t kEscape = 0x1B;
 const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard", "Controller"};
 constexpr int kCaptionCount = int(std::size(kCaptions));
-const std::string_view kSections[] = {"DISPLAY", "GRAPHICS", "GENERAL"};
+// per caption
+const std::vector<std::string_view> kSections[] = {
+    {"DISPLAY", "GRAPHICS", "GENERAL"},
+    {"MOUSE", "KEYBOARD"},
+    {"GENERAL", "GYRO", "BUTTONS"},
+};
+static_assert(std::size(kSections) == std::size(kCaptions));
 
 // as the game shows it: in the game's language, what has no translation (numbers, units) in title case
 std::u16string Text(std::string_view text) { return app::Translate(text, app::TitleCase); }
+
+// a row a section's list shows
+bool Listed(const app::rows::Row& r) {
+    using app::rows::Kind;
+    if (r.kind == Kind::Value) return app::rows::Shown(r);
+    return r.kind == Kind::Bind || r.kind == Kind::PadBind;
+}
 
 // a key or button name as it is: the controller's BACK is no Back button
 std::u16string Name(std::string_view text) {
@@ -138,10 +151,9 @@ constexpr int16_t kListTop = 116;
 // P_Video's own (options.mgm): before that page has been shown the list's y is still 0, so it is not read back
 constexpr int16_t kStockListY = 205;
 constexpr int16_t kRowHeight = 20;
-// the long pages (MOUSE AND KEYBOARD, CONTROLLER) start under the titles; a RECOMP SETTINGS section sits in the middle
-// of the room under them, which the stock place is for its few rows
+// a long section (KEYBOARD, BUTTONS) starts under the titles, a short one sits in the middle of the room under them,
+// which the stock place is for its few rows
 int16_t ListTop() {
-    if (g_take.mode >= 1) return kListTop;
     if (g_take.rows.empty()) return kStockListY;
     size_t rows = std::min(g_take.rows.size(), kRowsMax);
     return int16_t(kListTop + int(kRowsMax - rows) * kRowHeight / 2);
@@ -330,15 +342,10 @@ void Fill(X86Context& ctx, int select = 0) {
     size_t count = 0;
     const app::rows::Row* page = app::rows::Page(g_take.mode, &count);
     g_take.rows.clear();
-    if (g_take.mode == 0) {
-        for (size_t i = size_t(g_take.section) + 1; i < count && page[i].kind != Kind::Heading; i++)
-            if (page[i].kind == Kind::Value && app::rows::Shown(page[i])) g_take.rows.push_back(&page[i]);
-    } else {
-        for (size_t i = 0; i < count; i++) {
-            if (page[i].kind == Kind::Heading && !g_take.rows.empty()) g_take.rows.push_back(&kGap);
-            if (page[i].kind == Kind::Value || page[i].kind == Kind::Bind || page[i].kind == Kind::PadBind)
-                g_take.rows.push_back(&page[i]);
-        }
+    for (size_t i = size_t(g_take.section) + 1; i < count && page[i].kind != Kind::Heading; i++)
+        if (Listed(page[i])) g_take.rows.push_back(&page[i]);
+    // RECOMP SETTINGS has no restore row, as before sections
+    if (g_take.mode >= 1) {
         g_take.rows.push_back(&kGap);
         g_take.rows.push_back(nullptr);
     }
@@ -395,7 +402,7 @@ void Enter(X86Context& ctx, uint32_t menu, int mode, int section = -1) {
     uint32_t owner = R32(menu + kOwner);
     uint32_t page = R32(menu + kVideo);
     uint32_t list = R32(menu + kVideoList);
-    if (!owner || !page || !list || (mode == 0 && section < 0)) return;
+    if (!owner || !page || !list || section < 0) return;
     if (!g_shown) g_shown = std::max<uint8_t>(G<uint8_t>(list + kRowsShown), 4);
     g_take = {mode, menu, owner, page, list, false, false, {}, section};
     W16(list + kListY, uint16_t(ListTop()));
@@ -497,6 +504,7 @@ constexpr int16_t kBarStep = 30;
 constexpr uint32_t kElementDraw = 0x2C64E0;  // thiscall instance
 struct Sections {
     bool on = false;
+    int mode = 0;  // the caption they belong to
     int pending = 0;  // 1 shows them, -1 brings the options back, once the list's key handling is over
     uint32_t menu = 0;
     uint32_t page = 0;
@@ -507,12 +515,22 @@ struct Sections {
 Sections g_sections;  // game thread
 bool g_drawing = false;
 
-int Heading(std::string_view name) {
+// the caption's sections that have rows to list, as their headings' rows (versus hides the gyro)
+std::vector<int> ListedSections(int mode) {
     size_t count = 0;
-    const app::rows::Row* rows = app::rows::Page(0, &count);
-    for (size_t i = 0; i < count; i++)
-        if (rows[i].kind == app::rows::Kind::Heading && rows[i].label == name) return int(i);
-    return -1;
+    const app::rows::Row* rows = app::rows::Page(mode, &count);
+    std::vector<int> out;
+    for (std::string_view name : kSections[mode]) {
+        for (size_t i = 0; i < count; i++) {
+            if (rows[i].kind != app::rows::Kind::Heading || rows[i].label != name) continue;
+            bool any = false;
+            for (size_t j = i + 1; !any && j < count && rows[j].kind != app::rows::Kind::Heading; j++)
+                any = Listed(rows[j]);
+            if (any) out.push_back(int(i));
+            break;
+        }
+    }
+    return out;
 }
 
 bool OnSections(X86Context& ctx, uint32_t menu) {
@@ -544,11 +562,14 @@ void SectionsTick(X86Context& ctx) {
         uint32_t list = s.list;
         ctx.ecx = list;
         CallGuest(ctx, kClear, {});
-        for (std::string_view name : kSections) {
+        size_t count = 0;
+        const app::rows::Row* rows = app::rows::Page(s.mode, &count);
+        std::vector<int> sections = ListedSections(s.mode);
+        for (int heading : sections) {
             ctx.ecx = list;
-            CallGuest(ctx, kAddItem, {Wide16(Text(name)), 0});
+            CallGuest(ctx, kAddItem, {Wide16(Text(rows[heading].label)), 0});
         }
-        G<uint8_t>(list + kRowsShown) = uint8_t(std::size(kSections));
+        G<uint8_t>(list + kRowsShown) = uint8_t(sections.size());
         ctx.ecx = list;
         CallGuest(ctx, kLayout, {});
         Replay(ctx, 0);
@@ -598,7 +619,7 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     if (instance == s.title) {
         text = ReadWide(widget);
         ctx.ecx = widget + kTextString;
-        CallGuest(ctx, kSetText, {Wide16(Text(kCaptions[0]))});
+        CallGuest(ctx, kSetText, {Wide16(Text(kCaptions[s.mode]))});
     }
     ctx.ecx = instance;
     sub_002C64E0(ctx, base);
@@ -761,10 +782,11 @@ X86_FUNC(sub_001A53B5) {
     g_restore = false;
 }
 
-// RECOMP SETTINGS pressed: its sections show once the list's key handling is over
-static void OpenSections(X86Context& ctx, uint32_t menu, uint32_t list, uint32_t owner) {
+// a caption pressed: its sections show once the list's key handling is over
+static void OpenSections(X86Context& ctx, uint32_t menu, uint32_t list, uint32_t owner, int mode) {
     uint32_t page = R32(menu + kOptionsPage);
     g_sections.pending = 1;
+    g_sections.mode = mode;
     g_sections.menu = menu;
     g_sections.page = page;
     g_sections.list = list;
@@ -783,7 +805,8 @@ X86_FUNC(sub_001A4161) {
     bool ours_list = instance && (CallGuest(ctx, kIsElement, {instance, kListName}) & 0xFF);
     int row = ours_list ? int16_t(R16(R32(instance + kInstanceWidget) + kSelection)) : -1;
     if (ours_list && R32(instance + kInstanceWidget) == list && OnSections(ctx, menu)) {
-        if (row >= 0 && row < int(std::size(kSections))) Enter(ctx, menu, 0, Heading(kSections[row]));
+        std::vector<int> sections = ListedSections(g_sections.mode);
+        if (row >= 0 && row < int(sections.size())) Enter(ctx, menu, g_sections.mode, sections[size_t(row)]);
         ctx.ecx = menu + kListener;
         G<uint8_t>(owner + kTaken) = 1;
         ctx.eax = 0;
@@ -792,8 +815,7 @@ X86_FUNC(sub_001A4161) {
     }
     if (ours_list && g_take.mode < 0 && g_first >= 0 && R32(instance + kInstanceWidget) == list && row >= g_first &&
         row < g_first + kCaptionCount && IsPage(ctx, owner, kOptionsName)) {
-        if (row == g_first) OpenSections(ctx, menu, list, owner);
-        else Enter(ctx, menu, row - g_first);
+        OpenSections(ctx, menu, list, owner, row - g_first);
         ctx.ecx = menu + kListener;
         G<uint8_t>(owner + kTaken) = 1;
         ctx.eax = 0;

@@ -2,13 +2,17 @@
 // (40000 and 25000 in SplinterCell4Settings.ini), making vertical look 0.625x as fast as horizontal.
 // Mouse look bypasses the stick's clamp and curve, using aTurn / aLookUp directly,
 // so vertical and horizontal mouse look both use the yaw speed.
-// The stick's look takes the controller sensitivities as scaled speeds.
+// The stick's look takes the controller sensitivities as scaled speeds, the gyro turns the rotation first.
 #include <bit>
 
 #include "core/input.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
+
+namespace game {
+void ApplyGyro(uint32_t controller);  // gyro_look.cpp
+}
 
 namespace {
 
@@ -29,6 +33,7 @@ X86_FUNC(sub_000FD37E) {
         __imp__sub_000FD37E(ctx, base);
         return;
     }
+    game::ApplyGyro(controller);
     uint32_t yaw = R32(cam + kYawSpeed);
     uint32_t pitch = R32(cam + kPitchSpeed);
     if (Moved(controller, kMouseX) || Moved(controller, kMouseY)) {

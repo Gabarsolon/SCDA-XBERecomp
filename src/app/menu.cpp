@@ -103,6 +103,13 @@ int StepTable(const uint32_t (&values)[N], uint32_t& value, int step) {
     return i;
 }
 
+// one of names, stepped first
+template <size_t N>
+void StepName(uint32_t& value, const char* const (&names)[N], int step, char (&text)[64]) {
+    value = uint32_t(StepIndex(int(std::min<size_t>(value, N - 1)), step, int(N)));
+    std::snprintf(text, sizeof(text), "%s", names[value]);
+}
+
 // the monitor's modes smallest first, so Left steps down; the primary's for empty
 std::vector<Mode> Modes(const std::string& monitor) {
     std::vector<Mode> modes;
@@ -307,7 +314,7 @@ enum RowId {
     kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss, kFreeLookSensitivity, kWeaponSensitivity,
     kSniperSensitivity, kFmvScale, kColourBlind, kAimHorizontal, kAimVertical, kInvertMouseX, kInvertPadX, kInvertPadY,
     kSensitivityVertical, kPadDeadZone, kPadHorizontal, kPadVertical, kPadAimHorizontal, kPadAimVertical,
-    kVibration
+    kVibration, kGyroAiming, kGyroSensitivity, kGyroAxis, kGyroButton, kGyroButtonMode, kGyroRecenter, kGyroCalibrate
 };
 
 using rows::Kind;
@@ -315,12 +322,14 @@ using rows::Row;
 
 constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 
-// versus has none of the renderer features of story
+bool IsGyroRow(int id) { return id >= kGyroAiming && id <= kGyroCalibrate; }
+
+// versus has none of the renderer features of story, nor gyro aiming
 bool VersusHides(int id) {
     if (!kVersus) return false;
     return id == kShaderModel || id == kHdr || id == kToneMapping || id == kAmbientOcclusion ||
            id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kShadowFilter ||
-           id == kTickRate || id == kInputDelay;
+           id == kTickRate || id == kInputDelay || IsGyroRow(id);
 }
 
 constexpr Row kSettingsRows[] = {
@@ -398,6 +407,14 @@ const std::vector<Row>& PadRows() {
                                 {Kind::Value, kInvertPadY, "INVERT Y AXIS"},
                                 {Kind::Value, kPadDeadZone, "DEADZONE"},
                                 {Kind::Value, kVibration, "VIBRATION STRENGTH"},
+                                {Kind::Heading, -1, "GYRO"},
+                                {Kind::Value, kGyroAiming, "GYRO AIMING"},
+                                {Kind::Value, kGyroSensitivity, "GYRO SENSITIVITY"},
+                                {Kind::Value, kGyroAxis, "GYRO AXIS"},
+                                {Kind::Value, kGyroButton, "GYRO BUTTON"},
+                                {Kind::Value, kGyroButtonMode, "GYRO BUTTON MODE"},
+                                {Kind::Value, kGyroRecenter, "RECENTER BUTTON"},
+                                {Kind::Value, kGyroCalibrate, "CALIBRATE GYRO"},
                                 {Kind::Heading, -1, "BUTTONS"}};
         size_t count = 0;
         const input::Action* actions = input::PadActions(&count);
@@ -432,6 +449,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kInvertMouseX: return &s.invert_mouse_x;
         case kInvertPadX: return &s.invert_pad_x;
         case kInvertPadY: return &s.invert_pad_y;
+        case kGyroAiming: return &s.gyro.enabled;
         default: return nullptr;
     }
 }
@@ -609,6 +627,7 @@ float& Sensitivity(Settings& s, int id) {
         case kPadVertical: return s.pad_vertical_sensitivity;
         case kPadAimHorizontal: return s.pad_aim_horizontal_sensitivity;
         case kPadAimVertical: return s.pad_aim_vertical_sensitivity;
+        case kGyroSensitivity: return s.gyro.sensitivity;
         default: return s.mouse_sensitivity;
     }
 }
@@ -658,13 +677,31 @@ void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
         case kPadHorizontal:
         case kPadVertical:
         case kPadAimHorizontal:
-        case kPadAimVertical: {
+        case kPadAimVertical:
+        case kGyroSensitivity: {
             float& v = Sensitivity(s, id);
             // 0.1 to 5.0 in steps of 0.1
             if (step) v = float(StepRange(int(std::lround(v * 10.0f)), 1, 50, 1, step)) / 10.0f;
             std::snprintf(text, sizeof(text), "%.1f", v);
             break;
         }
+        case kGyroAxis:
+            StepName(s.gyro.axis, gyro::kAxisNames, step, text);
+            break;
+        case kGyroButton:
+            StepName(s.gyro.button, gyro::kButtonNames, step, text);
+            break;
+        case kGyroButtonMode:
+            StepName(s.gyro.button_mode, gyro::kButtonModeNames, step, text);
+            break;
+        case kGyroRecenter:
+            StepName(s.gyro.recenter_button, gyro::kButtonNames, step, text);
+            break;
+        case kGyroCalibrate:
+            // a step shown on a copy of the settings starts nothing
+            if (step && &s == &Get()) gyro::StartCalibration();
+            std::snprintf(text, sizeof(text), "%s", gyro::Calibrating() ? "KEEP STILL" : "START");
+            break;
         case kVibration:
             // 0% to 200% in steps of 10
             if (step) s.vibration_strength = uint32_t(StepRange(int(s.vibration_strength), 0, 200, 10, step));
@@ -719,6 +756,7 @@ void RestoreDefaults(int page) {
         Get().invert_pad_y = false;
         Get().pad_dead_zone = 0.0f;
         Get().vibration_strength = 100;
+        Get().gyro = gyro::Settings{};
         Get().pad_horizontal_sensitivity = Get().pad_vertical_sensitivity = 1.0f;
         Get().pad_aim_horizontal_sensitivity = Get().pad_aim_vertical_sensitivity = 1.0f;
         input::ResetPadBindings();
@@ -749,6 +787,7 @@ void RestoreDefaults(int page) {
     Get().invert_pad_y = keep.invert_pad_y;
     Get().pad_dead_zone = keep.pad_dead_zone;
     Get().vibration_strength = keep.vibration_strength;
+    Get().gyro = keep.gyro;
     Get().pad_horizontal_sensitivity = keep.pad_horizontal_sensitivity;
     Get().pad_vertical_sensitivity = keep.pad_vertical_sensitivity;
     Get().pad_aim_horizontal_sensitivity = keep.pad_aim_horizontal_sensitivity;

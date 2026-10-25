@@ -67,8 +67,9 @@ set(IMGUI_SOURCES
 
 file(GLOB HOST_SOURCES CONFIGURE_DEPENDS src/*/*.cpp)
 list(FILTER HOST_SOURCES EXCLUDE REGEX "/src/(game|versus)/")
-# SDL's and Opus's headers go to the input and voice code alone (both are linked LINK_ONLY)
-set_source_files_properties(src/core/input.cpp src/audio/voice.cpp src/audio/voice_link.cpp PROPERTIES
+# SDL's and Opus's headers go to the input, gyro and voice code alone (both are linked LINK_ONLY)
+set_source_files_properties(src/core/input.cpp src/core/gyro.cpp src/audio/voice.cpp src/audio/voice_link.cpp
+    PROPERTIES
     INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include;${opus_SOURCE_DIR}/include")
 
 # Generate build_info.h and track it as a dependency of version-related
