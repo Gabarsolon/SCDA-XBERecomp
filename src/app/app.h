@@ -60,6 +60,12 @@ struct Settings {
     bool invert_mouse_x = false;
     bool invert_pad_x = false;  // the right stick
     bool invert_pad_y = false;
+    float pad_dead_zone = 0.0f;  // per stick axis, 0 the game's own
+    // the right stick's look, the aim ones times the others while aiming
+    float pad_horizontal_sensitivity = 1.0f;
+    float pad_vertical_sensitivity = 1.0f;
+    float pad_aim_horizontal_sensitivity = 1.0f;
+    float pad_aim_vertical_sensitivity = 1.0f;
     // versus only, in place of mouse_sensitivity: third person, weapon raised, sniper scope
     float free_look_sensitivity = 1.0f;
     float weapon_sensitivity = 1.0f;

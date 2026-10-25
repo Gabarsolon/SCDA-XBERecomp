@@ -306,7 +306,7 @@ enum RowId {
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
     kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss, kFreeLookSensitivity, kWeaponSensitivity,
     kSniperSensitivity, kFmvScale, kColourBlind, kAimHorizontal, kAimVertical, kInvertMouseX, kInvertPadX, kInvertPadY,
-    kSensitivityVertical
+    kSensitivityVertical, kPadDeadZone, kPadHorizontal, kPadVertical, kPadAimHorizontal, kPadAimVertical
 };
 
 using rows::Kind;
@@ -389,8 +389,13 @@ const std::vector<Row>& InputRows() {
 const std::vector<Row>& PadRows() {
     static const std::vector<Row> list = [] {
         std::vector<Row> out = {{Kind::Heading, -1, "GENERAL"},
+                                {Kind::Value, kPadHorizontal, "HORIZONTAL SENSITIVITY"},
+                                {Kind::Value, kPadVertical, "VERTICAL SENSITIVITY"},
+                                {Kind::Value, kPadAimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
+                                {Kind::Value, kPadAimVertical, "AIM VERTICAL SENSITIVITY"},
                                 {Kind::Value, kInvertPadX, "INVERT X AXIS"},
                                 {Kind::Value, kInvertPadY, "INVERT Y AXIS"},
+                                {Kind::Value, kPadDeadZone, "DEADZONE"},
                                 {Kind::Heading, -1, "BUTTONS"}};
         size_t count = 0;
         const input::Action* actions = input::PadActions(&count);
@@ -598,6 +603,10 @@ float& Sensitivity(Settings& s, int id) {
         case kSniperSensitivity: return s.sniper_sensitivity;
         case kAimHorizontal: return s.aim_horizontal_sensitivity;
         case kAimVertical: return s.aim_vertical_sensitivity;
+        case kPadHorizontal: return s.pad_horizontal_sensitivity;
+        case kPadVertical: return s.pad_vertical_sensitivity;
+        case kPadAimHorizontal: return s.pad_aim_horizontal_sensitivity;
+        case kPadAimVertical: return s.pad_aim_vertical_sensitivity;
         default: return s.mouse_sensitivity;
     }
 }
@@ -643,11 +652,24 @@ void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
         case kWeaponSensitivity:
         case kSniperSensitivity:
         case kAimHorizontal:
-        case kAimVertical: {
+        case kAimVertical:
+        case kPadHorizontal:
+        case kPadVertical:
+        case kPadAimHorizontal:
+        case kPadAimVertical: {
             float& v = Sensitivity(s, id);
             // 0.1 to 5.0 in steps of 0.1
             if (step) v = float(StepRange(int(std::lround(v * 10.0f)), 1, 50, 1, step)) / 10.0f;
             std::snprintf(text, sizeof(text), "%.1f", v);
+            break;
+        }
+        case kPadDeadZone: {
+            float game = input::GameDeadZone();
+            float zone = s.pad_dead_zone > 0.0f ? s.pad_dead_zone : game;
+            // 0.1 to 1.0 in steps of 0.1
+            if (step) s.pad_dead_zone = float(StepRange(int(std::lround(zone * 10.0f)), 1, 10, 1, step)) / 10.0f;
+            if (s.pad_dead_zone == 0.0f) std::snprintf(text, sizeof(text), "%.2g (DEFAULT)", game);
+            else std::snprintf(text, sizeof(text), "%.1f", s.pad_dead_zone);
             break;
         }
     }
@@ -687,6 +709,9 @@ void RestoreDefaults(int page) {
     if (page == kControllerPage) {
         Get().invert_pad_x = false;
         Get().invert_pad_y = false;
+        Get().pad_dead_zone = 0.0f;
+        Get().pad_horizontal_sensitivity = Get().pad_vertical_sensitivity = 1.0f;
+        Get().pad_aim_horizontal_sensitivity = Get().pad_aim_vertical_sensitivity = 1.0f;
         input::ResetPadBindings();
         return;
     }
@@ -713,6 +738,11 @@ void RestoreDefaults(int page) {
     Get().invert_mouse_x = keep.invert_mouse_x;
     Get().invert_pad_x = keep.invert_pad_x;
     Get().invert_pad_y = keep.invert_pad_y;
+    Get().pad_dead_zone = keep.pad_dead_zone;
+    Get().pad_horizontal_sensitivity = keep.pad_horizontal_sensitivity;
+    Get().pad_vertical_sensitivity = keep.pad_vertical_sensitivity;
+    Get().pad_aim_horizontal_sensitivity = keep.pad_aim_horizontal_sensitivity;
+    Get().pad_aim_vertical_sensitivity = keep.pad_aim_vertical_sensitivity;
     Get().keys = keep.keys;
     Get().pad_buttons = keep.pad_buttons;
     Changed(true);

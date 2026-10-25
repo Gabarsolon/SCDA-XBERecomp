@@ -98,6 +98,15 @@ void SetInteractReloads(bool on);
 void SetTargeting(bool on);
 // aiming a weapon or through the sniper scope: the mouse takes the aim sensitivities
 void SetAiming(bool on);
+bool Aiming();
+// the controller's look sensitivities, horizontal and vertical, with the aim ones when aiming
+struct LookScale {
+    float x;
+    float y;
+};
+LookScale PadLookScale(bool aiming);
+// the stick axis dead zone the game applies itself
+float GameDeadZone();
 // carrying a body: the keyboard's alt fire drops it (DropBody), as SCCT PC's s_Carry ProcessAltFire, not the pad's LT
 void SetCarrying(bool on);
 // hanging from a ledge (s_Ledge): the move backward key, with no strafe key held, holds B (crouch) and drops, as SCCT PC

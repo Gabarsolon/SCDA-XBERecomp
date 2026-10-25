@@ -110,6 +110,12 @@ void Load() {
     s.invert_mouse_x = t["invert_mouse_x"].value_or(s.invert_mouse_x);
     s.invert_pad_x = t["invert_pad_x"].value_or(s.invert_pad_x);
     s.invert_pad_y = t["invert_pad_y"].value_or(s.invert_pad_y);
+    float zone = float(t["pad_dead_zone"].value_or(double(s.pad_dead_zone)));
+    s.pad_dead_zone = zone > 0.0f ? std::clamp(zone, 0.1f, 1.0f) : 0.0f;
+    s.pad_horizontal_sensitivity = float(t["pad_horizontal_sensitivity"].value_or(double(s.pad_horizontal_sensitivity)));
+    s.pad_vertical_sensitivity = float(t["pad_vertical_sensitivity"].value_or(double(s.pad_vertical_sensitivity)));
+    s.pad_aim_horizontal_sensitivity = float(t["pad_aim_horizontal_sensitivity"].value_or(double(s.pad_aim_horizontal_sensitivity)));
+    s.pad_aim_vertical_sensitivity = float(t["pad_aim_vertical_sensitivity"].value_or(double(s.pad_aim_vertical_sensitivity)));
     s.free_look_sensitivity = float(t["free_look_sensitivity"].value_or(double(s.free_look_sensitivity)));
     s.weapon_sensitivity = float(t["weapon_sensitivity"].value_or(double(s.weapon_sensitivity)));
     s.sniper_sensitivity = float(t["sniper_sensitivity"].value_or(double(s.sniper_sensitivity)));
@@ -179,6 +185,11 @@ toml::table Table() {
                   {"invert_mouse_x", s.invert_mouse_x},
                   {"invert_pad_x", s.invert_pad_x},
                   {"invert_pad_y", s.invert_pad_y},
+                  {"pad_dead_zone", double(s.pad_dead_zone)},
+                  {"pad_horizontal_sensitivity", double(s.pad_horizontal_sensitivity)},
+                  {"pad_vertical_sensitivity", double(s.pad_vertical_sensitivity)},
+                  {"pad_aim_horizontal_sensitivity", double(s.pad_aim_horizontal_sensitivity)},
+                  {"pad_aim_vertical_sensitivity", double(s.pad_aim_vertical_sensitivity)},
                   {"free_look_sensitivity", double(s.free_look_sensitivity)},
                   {"weapon_sensitivity", double(s.weapon_sensitivity)},
                   {"sniper_sensitivity", double(s.sniper_sensitivity)},

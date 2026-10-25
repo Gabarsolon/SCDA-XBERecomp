@@ -592,6 +592,23 @@ X86_FUNC(sub_00188E80) {
     }
 }
 
+// the stick's turn and look up rates times the controller sensitivities
+void ScalePadLook(uint32_t controller) {
+    if (!Looking(controller)) return;
+    input::LookScale scale = input::PadLookScale(g_binoculars || WeaponRaised(controller));
+    float turn = std::bit_cast<float>(R32(controller + kTurnRate));
+    float up = std::bit_cast<float>(R32(controller + kLookRate));
+    WriteFloat(controller + kTurnRate, turn * scale.x);
+    WriteFloat(controller + kLookRate, up * scale.y);
+    float before = std::hypot(turn, up);
+    if (!g_binoculars || before == 0.0f) return;
+    // the binoculars turn by the rates' direction times the magnitude
+    float magnitude = std::bit_cast<float>(R32(controller + kMagnitude));
+    magnitude *= std::hypot(turn * scale.x, up * scale.y) / before;
+    WriteFloat(controller + kMagnitude, magnitude);
+    WriteFloat(controller + kSmoothMagnitude, magnitude);
+}
+
 // thiscall(controller, float delta seconds), ret 4
 X86_EXTERN_FUNC(__imp__sub_0003FB80);
 X86_FUNC(sub_0003FB80) {
@@ -601,7 +618,10 @@ X86_FUNC(sub_0003FB80) {
     if (controller != g_player) return;
     bool mouse = (g_dx != 0.0f || g_dy != 0.0f) && seconds > 0.0f && Looking(controller);
     PitchSpeed(controller, mouse);
-    if (!mouse) return;
+    if (!mouse) {
+        ScalePadLook(controller);
+        return;
+    }
     // the stick's up is positive, the mouse's is negative
     bool invert = R32(controller + kOptions) & kInvertLook;
     float view = ViewSensitivity(controller);

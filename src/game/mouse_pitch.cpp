@@ -2,6 +2,10 @@
 // (40000 and 25000 in SplinterCell4Settings.ini), making vertical look 0.625x as fast as horizontal.
 // Mouse look bypasses the stick's clamp and curve, using aTurn / aLookUp directly,
 // so vertical and horizontal mouse look both use the yaw speed.
+// The stick's look takes the controller sensitivities as scaled speeds.
+#include <bit>
+
+#include "core/input.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -21,12 +25,20 @@ X86_EXTERN_FUNC(__imp__sub_000FD37E);
 X86_FUNC(sub_000FD37E) {
     uint32_t cam = ctx.ecx;
     uint32_t controller = R32(cam + kController);
-    if (!controller || (!Moved(controller, kMouseX) && !Moved(controller, kMouseY))) {
+    if (!controller) {
         __imp__sub_000FD37E(ctx, base);
         return;
     }
+    uint32_t yaw = R32(cam + kYawSpeed);
     uint32_t pitch = R32(cam + kPitchSpeed);
-    W32(cam + kPitchSpeed, R32(cam + kYawSpeed));
+    if (Moved(controller, kMouseX) || Moved(controller, kMouseY)) {
+        W32(cam + kPitchSpeed, yaw);
+    } else {
+        input::LookScale scale = input::PadLookScale(input::Aiming());
+        W32(cam + kYawSpeed, std::bit_cast<uint32_t>(std::bit_cast<float>(yaw) * scale.x));
+        W32(cam + kPitchSpeed, std::bit_cast<uint32_t>(std::bit_cast<float>(pitch) * scale.y));
+    }
     __imp__sub_000FD37E(ctx, base);
+    W32(cam + kYawSpeed, yaw);
     W32(cam + kPitchSpeed, pitch);
 }

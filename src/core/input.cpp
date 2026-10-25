@@ -5,6 +5,7 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cwctype>
 #include <iterator>
@@ -863,6 +864,24 @@ void StartPads() {
     }
 }
 
+// The game drops a stick axis inside its own dead zone: the axis is moved so that zone starts where the chosen
+// one does, the identity at the game's own
+SHORT MoveDeadZone(SHORT value, float zone) {
+    float game = GameDeadZone();
+    float v = std::min(std::abs(float(value)) / kStickMax, 1.0f);
+    if (v <= zone) return 0;
+    float out = (game + (v - zone) / (1.0f - zone) * (1.0f - game)) * kStickMax;
+    return SHORT(std::lround(value < 0 ? -out : out));
+}
+
+void ApplyDeadZone(XINPUT_GAMEPAD& g, float zone) {
+    if (zone <= 0.0f || zone == GameDeadZone()) return;
+    g.sThumbLX = MoveDeadZone(g.sThumbLX, zone);
+    g.sThumbLY = MoveDeadZone(g.sThumbLY, zone);
+    g.sThumbRX = MoveDeadZone(g.sThumbRX, zone);
+    g.sThumbRY = MoveDeadZone(g.sThumbRY, zone);
+}
+
 // false for an empty slot
 bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
     std::lock_guard lock(g_pads_mutex);
@@ -921,6 +940,7 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
     const app::Settings& s = app::Get();
     g.sThumbRX = s.invert_pad_x ? SHORT(-1 - rx) : rx;
     g.sThumbRY = s.invert_pad_y ? SHORT(-1 - ry) : ry;
+    ApplyDeadZone(g, s.pad_dead_zone);
     return true;
 }
 
@@ -1241,6 +1261,24 @@ void SetTargeting(bool on) {
 
 void SetAiming(bool on) {
     g_aiming = on;
+}
+
+bool Aiming() {
+    return g_aiming;
+}
+
+LookScale PadLookScale(bool aiming) {
+    const app::Settings& s = app::Get();
+    LookScale scale{s.pad_horizontal_sensitivity, s.pad_vertical_sensitivity};
+    if (aiming) {
+        scale.x *= s.pad_aim_horizontal_sensitivity;
+        scale.y *= s.pad_aim_vertical_sensitivity;
+    }
+    return scale;
+}
+
+float GameDeadZone() {
+    return kVersus ? kVersusFloor : kDeadZone;
 }
 
 void SetCarrying(bool on) {
