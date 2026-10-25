@@ -148,6 +148,7 @@ constexpr Entry kEntries[] = {
     {"KEYBOARD", {u"Clavier", u"Tastatur", u"Tastiera", u"Teclado"}},
     {"HORIZONTAL SENSITIVITY", {u"Sensibilité horizontale", u"Horizontale Empfindlichkeit", u"Sensibilità orizzontale", u"Sensibilidad horizontal"}},
     {"VERTICAL SENSITIVITY", {u"Sensibilité verticale", u"Vertikale Empfindlichkeit", u"Sensibilità verticale", u"Sensibilidad vertical"}},
+    {"VIBRATION STRENGTH", {u"Intensité des vibrations", u"Vibrationsstärke", u"Intensità vibrazione", u"Intensidad de la vibración"}},
     {"DEADZONE", {u"Zone morte", u"Totzone", u"Zona morta", u"Zona muerta"}},
     {"BUTTONS", {u"Boutons", u"Tasten", u"Pulsanti", u"Botones"}},
     {"INPUT DEVICES", {u"Périphériques", u"Eingabegeräte", u"Dispositivi di input", u"Dispositivos de entrada"}},

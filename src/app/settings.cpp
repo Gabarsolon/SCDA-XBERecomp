@@ -114,8 +114,11 @@ void Load() {
     s.pad_dead_zone = zone > 0.0f ? std::clamp(zone, 0.1f, 1.0f) : 0.0f;
     s.pad_horizontal_sensitivity = float(t["pad_horizontal_sensitivity"].value_or(double(s.pad_horizontal_sensitivity)));
     s.pad_vertical_sensitivity = float(t["pad_vertical_sensitivity"].value_or(double(s.pad_vertical_sensitivity)));
-    s.pad_aim_horizontal_sensitivity = float(t["pad_aim_horizontal_sensitivity"].value_or(double(s.pad_aim_horizontal_sensitivity)));
-    s.pad_aim_vertical_sensitivity = float(t["pad_aim_vertical_sensitivity"].value_or(double(s.pad_aim_vertical_sensitivity)));
+    s.pad_aim_horizontal_sensitivity =
+        float(t["pad_aim_horizontal_sensitivity"].value_or(double(s.pad_aim_horizontal_sensitivity)));
+    s.pad_aim_vertical_sensitivity =
+        float(t["pad_aim_vertical_sensitivity"].value_or(double(s.pad_aim_vertical_sensitivity)));
+    s.vibration_strength = std::min(t["vibration_strength"].value_or(s.vibration_strength), 200u);
     s.free_look_sensitivity = float(t["free_look_sensitivity"].value_or(double(s.free_look_sensitivity)));
     s.weapon_sensitivity = float(t["weapon_sensitivity"].value_or(double(s.weapon_sensitivity)));
     s.sniper_sensitivity = float(t["sniper_sensitivity"].value_or(double(s.sniper_sensitivity)));
@@ -190,6 +193,7 @@ toml::table Table() {
                   {"pad_vertical_sensitivity", double(s.pad_vertical_sensitivity)},
                   {"pad_aim_horizontal_sensitivity", double(s.pad_aim_horizontal_sensitivity)},
                   {"pad_aim_vertical_sensitivity", double(s.pad_aim_vertical_sensitivity)},
+                  {"vibration_strength", int64_t(s.vibration_strength)},
                   {"free_look_sensitivity", double(s.free_look_sensitivity)},
                   {"weapon_sensitivity", double(s.weapon_sensitivity)},
                   {"sniper_sensitivity", double(s.sniper_sensitivity)},

@@ -306,7 +306,8 @@ enum RowId {
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
     kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss, kFreeLookSensitivity, kWeaponSensitivity,
     kSniperSensitivity, kFmvScale, kColourBlind, kAimHorizontal, kAimVertical, kInvertMouseX, kInvertPadX, kInvertPadY,
-    kSensitivityVertical, kPadDeadZone, kPadHorizontal, kPadVertical, kPadAimHorizontal, kPadAimVertical
+    kSensitivityVertical, kPadDeadZone, kPadHorizontal, kPadVertical, kPadAimHorizontal, kPadAimVertical,
+    kVibration
 };
 
 using rows::Kind;
@@ -396,6 +397,7 @@ const std::vector<Row>& PadRows() {
                                 {Kind::Value, kInvertPadX, "INVERT X AXIS"},
                                 {Kind::Value, kInvertPadY, "INVERT Y AXIS"},
                                 {Kind::Value, kPadDeadZone, "DEADZONE"},
+                                {Kind::Value, kVibration, "VIBRATION STRENGTH"},
                                 {Kind::Heading, -1, "BUTTONS"}};
         size_t count = 0;
         const input::Action* actions = input::PadActions(&count);
@@ -663,6 +665,12 @@ void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
             std::snprintf(text, sizeof(text), "%.1f", v);
             break;
         }
+        case kVibration:
+            // 0% to 200% in steps of 10
+            if (step) s.vibration_strength = uint32_t(StepRange(int(s.vibration_strength), 0, 200, 10, step));
+            if (s.vibration_strength == 100) std::snprintf(text, sizeof(text), "100%% (DEFAULT)");
+            else std::snprintf(text, sizeof(text), "%u%%", s.vibration_strength);
+            break;
         case kPadDeadZone: {
             float game = input::GameDeadZone();
             float zone = s.pad_dead_zone > 0.0f ? s.pad_dead_zone : game;
@@ -710,6 +718,7 @@ void RestoreDefaults(int page) {
         Get().invert_pad_x = false;
         Get().invert_pad_y = false;
         Get().pad_dead_zone = 0.0f;
+        Get().vibration_strength = 100;
         Get().pad_horizontal_sensitivity = Get().pad_vertical_sensitivity = 1.0f;
         Get().pad_aim_horizontal_sensitivity = Get().pad_aim_vertical_sensitivity = 1.0f;
         input::ResetPadBindings();
@@ -739,6 +748,7 @@ void RestoreDefaults(int page) {
     Get().invert_pad_x = keep.invert_pad_x;
     Get().invert_pad_y = keep.invert_pad_y;
     Get().pad_dead_zone = keep.pad_dead_zone;
+    Get().vibration_strength = keep.vibration_strength;
     Get().pad_horizontal_sensitivity = keep.pad_horizontal_sensitivity;
     Get().pad_vertical_sensitivity = keep.pad_vertical_sensitivity;
     Get().pad_aim_horizontal_sensitivity = keep.pad_aim_horizontal_sensitivity;

@@ -66,6 +66,7 @@ struct Settings {
     float pad_vertical_sensitivity = 1.0f;
     float pad_aim_horizontal_sensitivity = 1.0f;
     float pad_aim_vertical_sensitivity = 1.0f;
+    uint32_t vibration_strength = 100;  // percent of the game's rumble, 0 to 200
     // versus only, in place of mouse_sensitivity: third person, weapon raised, sniper scope
     float free_look_sensitivity = 1.0f;
     float weapon_sensitivity = 1.0f;
