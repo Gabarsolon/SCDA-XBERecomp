@@ -1,4 +1,4 @@
-# Splinter Cell Double Agent (original Xbox), statically recompiled
+# Splinter Cell: Double Agent (original Xbox), statically recompiled
 
 cmake_minimum_required(VERSION 3.25)
 project(scda LANGUAGES C CXX RC)

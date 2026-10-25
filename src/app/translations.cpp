@@ -234,8 +234,8 @@ std::u16string app::Translate(std::string_view text, std::string (*rest)(std::st
 // the F10 panel's upper case in the game's title case: "DISPLAY MODE" as "Display Mode", "SPACE/ENTER" as "Space/Enter"
 std::string app::TitleCase(std::string_view text) {
     constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"};
-    constexpr std::string_view kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA",
-                                          "SSAO", "GTAO", "HUD", "LB", "RB", "LT", "RT", "LS", "RS"};
+    constexpr std::string_view kKeep[] = {"FPS", "FMV", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR",
+                                          "MSAA", "SMAA", "SSAO", "GTAO", "HUD", "LB", "RB", "LT", "RT", "LS", "RS"};
     std::string out;
     size_t i = 0;
     while (i < text.size()) {

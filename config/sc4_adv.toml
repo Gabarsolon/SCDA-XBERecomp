@@ -1,4 +1,4 @@
-# Recompiler input for sc4_adv.xbe (Splinter Cell Double Agent versus, original Xbox, title 5553005E)
+# Recompiler input for sc4_adv.xbe (Splinter Cell: Double Agent versus, original Xbox, title 5553005E)
 includes = ["xdk_symbols_adv.toml"]
 
 [xbe]

@@ -78,7 +78,7 @@ void LogSystem() {
     std::strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     // Debug builds name their commit
     constexpr const char* kBuild = logx::kVerbose ? " (" SCDA_COMMIT ", debug)" : "";
-    LOGR("Splinter Cell Double Agent XBE Recomp V%d%s, %ls (%s), %s", kVersion, kBuild,
+    LOGR("Splinter Cell: Double Agent XBE Recomp V%d%s, %ls (%s), %s", kVersion, kBuild,
          std::filesystem::path(exe).filename().c_str(), IMAGE_XBE, date);
     LOGR("Path: %ls", ExeDir().c_str());
     LOGR("OS: %s", OsVersion().c_str());

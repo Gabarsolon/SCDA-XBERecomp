@@ -506,7 +506,8 @@ bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
         case kRenderResolution: {
             // 20% to 200% in steps of 5
             if (step) s.render_percent = uint32_t(StepRange(int(s.render_percent), 20, 200, 5, step));
-            Mode out = Output();
+            // Get the selected monitor's mode before applying the display change
+            Mode out = StepResolution(s, 0);
             std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100,
                           out.height * s.render_percent / 100);
             return true;

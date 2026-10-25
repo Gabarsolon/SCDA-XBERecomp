@@ -1,4 +1,4 @@
-# Recompiler input for default.xbe (Splinter Cell Double Agent, original Xbox, title 5553005E)
+# Recompiler input for default.xbe (Splinter Cell: Double Agent, original Xbox, title 5553005E)
 includes = ["xdk_symbols.toml"]
 
 [xbe]

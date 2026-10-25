@@ -26,7 +26,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-constexpr wchar_t kTitle[] = L"Splinter Cell Double Agent";
+constexpr wchar_t kTitle[] = L"Splinter Cell: Double Agent";
 
 // assets beside the exe or in any folder above it (the build output)
 fs::path FindAssets() {
