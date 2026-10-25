@@ -56,6 +56,9 @@ struct Settings {
     bool tone_mapping = false;
     uint32_t ambient_occlusion = 0;  // screen space, from the scene's depth: 0 off, 1 SSAO, 2 GTAO
     bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
+    bool custom_textures = true;     // images in textures\replacement\ beside the exe replace the game's
+    bool dump_textures = false;      // each texture once into textures\dumps\ beside the exe
+    uint32_t texture_dump_format = 0;  // 0 PNG, 1 DDS
     float mouse_sensitivity = 1.0f;  // horizontal
     float mouse_vertical_sensitivity = 1.0f;
     bool invert_mouse = false;  // the Y axis
@@ -159,6 +162,7 @@ bool MenuOpen();
 uint32_t SettingsRevision();  // counts saved setting changes, from F10 or the in-game pages
 bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
+void ToggleTextureReplacement();  // the bind's: flips and saves the setting
 void DrawUi();
 
 // the window's display has Windows HDR on, from the renderer

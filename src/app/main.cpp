@@ -133,11 +133,12 @@ void ApplyNow() {
     g_display_applied++;
 }
 
-// a key went down: the settings panel and hide HUD binds
+// a key went down: the settings panel, hide HUD and texture replacement binds
 bool HostKey(WPARAM wp, LPARAM lp) {
     if (lp & (1 << 30) || ConsoleOpen()) return false;  // bit 30: a repeat of a held key
     if (input::HostKey(input::KeyEvent::SettingsPanel, int(wp))) ToggleMenu();
     else if (!MenuOpen() && input::HostKey(input::KeyEvent::HideHud, int(wp))) g_hide_hud = !g_hide_hud;
+    else if (!MenuOpen() && input::HostKey(input::KeyEvent::ToggleTextures, int(wp))) ToggleTextureReplacement();
     else return false;
     return true;
 }

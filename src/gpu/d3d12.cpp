@@ -40,6 +40,7 @@
 #include "gpu/smaa_shader.h"
 #include "gpu/smaa_textures.h"
 #include "gpu/texture.h"
+#include "gpu/texturedumper.h"
 #include "gpu/vertex.h"
 #include "kernel/kernel.h"
 
@@ -622,6 +623,9 @@ struct Tex {
     uint64_t sig = 0;
     uint64_t frame = 0;
     bool norm = false;  // a normalization cube
+    const Tex* swap = nullptr;  // the texture pack's image drawn in its place
+    uint64_t pack_key = 0;      // its pack image is still loading
+    uint32_t pack_gen = 0;      // texturedumper::Generation the key was taken at, 0 after new bytes
 };
 
 struct PsoKey {
@@ -893,6 +897,10 @@ private:
     bool CreateTexture(Tex& tx, const TextureDesc& d, const FormatInfo& fi);
     void UploadTexture(Tex& tx, const TextureDesc& d, const FormatInfo& fi, const uint8_t* p, bool same);
     void UploadTextureLevel(Tex& tx, uint32_t f, uint32_t l, const std::vector<uint8_t>& px, uint32_t pitch);
+    void LatchPackKey(Tex& tx, const TextureDesc& d, const FormatInfo& fi);
+    void LatchPackImage(Tex& tx);
+    void ReleasePackTextures();
+    void CreatePackTexture(Tex& r, const texturedumper::Image& img);
     uint64_t EnsurePixelShader(const PixelKey& pk, uint64_t pkey);
     void BuildPipelineKey(const State& s, const Assembled& a, uint64_t vh, uint64_t ph, PsoKey& k);
     void KeyDepthStencil(const State& s, const Assembled& a, PsoKey& k);
@@ -1075,6 +1083,7 @@ private:
     uint32_t smp_used_ = 0;
     std::unordered_map<uint64_t, Target> targets_;
     std::unordered_map<uint32_t, Tex> textures_;
+    std::unordered_map<uint64_t, Tex> pack_textures_;  // texture pack images by key, kept for the run
     std::unordered_map<uint64_t, ComPtr<ID3D12PipelineState>> blit_psos_;
     // shader model 3.0 features, from the settings at each present
     bool sm3_ = false;
@@ -1340,10 +1349,18 @@ void D3D12Backend::LoadSettings() {
     msaa_ = Samples(msaa_set_);
 }
 
-// tone mapping and async shaders from the settings; sm3_ is set before
+// tone mapping, async shaders and the texture pack from the settings; sm3_ is set before
 void D3D12Backend::LatchFeatureSettings(const app::Settings& set) {
     tone_ = sm3_ && set.tone_mapping;
     async_ = set.async_shaders;
+    if (texturedumper::Update()) ReleasePackTextures();
+}
+
+// the pack's files changed: each image is made again when next drawn; Generation moved on, so every texture lets
+// go of its old copy before it draws
+void D3D12Backend::ReleasePackTextures() {
+    for (auto& entry : pack_textures_) CurrentFrame().garbage.push_back(entry.second.res);
+    pack_textures_.clear();
 }
 
 void D3D12Backend::Begin() {
@@ -2883,12 +2900,67 @@ ID3D12Resource* D3D12Backend::BindGuestTexture(int stage, const TextureDesc& d, 
         if (sig != tx.sig || !same) {
             tx.sig = sig;
             UploadTexture(tx, d, fi, p, same);
+            tx.pack_gen = 0;
         }
     }
-    FillTextureView(tx, d, stages.sv[stage]);
+    if (tx.pack_gen != texturedumper::Generation()) LatchPackKey(tx, d, fi);
+    if (tx.pack_key) LatchPackImage(tx);
+    const Tex& drawn = tx.swap ? *tx.swap : tx;
+    FillTextureView(drawn, d, stages.sv[stage]);
     if (fi.depth) info.shadow = ShadowDepthKind(d.format);
     if (tx.norm && d.cube && hdr_) info.flags |= kTexNormCube;
-    return tx.res.Get();
+    return drawn.res.Get();
+}
+
+// after new bytes or a texture setting change: the name the pack and the dumps know the bytes by
+void D3D12Backend::LatchPackKey(Tex& tx, const TextureDesc& d, const FormatInfo& fi) {
+    const uint8_t* p = static_cast<const uint8_t*>(kernel::HostPtr(d.data));
+    tx.pack_gen = texturedumper::Generation();
+    tx.swap = nullptr;
+    uint64_t key = texturedumper::Key(d, fi, p, nullptr);
+    texturedumper::Dump(key, d, p, nullptr);
+    // dumping alone keys the bytes too: the pack image is not drawn then
+    tx.pack_key = texturedumper::Replacing() ? key : 0;
+}
+
+// the pack image for tx's bytes once it has loaded; textures with the same bytes share its GPU copy
+void D3D12Backend::LatchPackImage(Tex& tx) {
+    auto it = pack_textures_.find(tx.pack_key);
+    if (it == pack_textures_.end()) {
+        texturedumper::Image img;
+        texturedumper::Lookup got = texturedumper::Take(tx.pack_key, img);
+        if (got == texturedumper::Lookup::Loading) return;
+        if (got == texturedumper::Lookup::None) {
+            tx.pack_key = 0;
+            return;
+        }
+        it = pack_textures_.emplace(tx.pack_key, Tex{}).first;
+        CreatePackTexture(it->second, img);
+    }
+    if (it->second.res) tx.swap = &it->second;
+    tx.pack_key = 0;
+}
+
+void D3D12Backend::CreatePackTexture(Tex& r, const texturedumper::Image& img) {
+    r.fmt = img.format;
+    r.levels = uint32_t(img.levels.size());
+    D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC td{};
+    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    td.Width = img.width;
+    td.Height = img.height;
+    td.DepthOrArraySize = 1;
+    td.MipLevels = UINT16(r.levels);
+    td.Format = r.fmt;
+    td.SampleDesc.Count = 1;
+    if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                                             IID_PPV_ARGS(&r.res)))) {
+        LOGE("texture pack: a %ux%u image could not be made", img.width, img.height);
+        return;
+    }
+    for (uint32_t l = 0; l < r.levels; l++) UploadTextureLevel(r, 0, l, img.levels[l].px, img.levels[l].pitch);
+    D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_COPY_DEST;
+    Transition(r.res.Get(), st, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
 
 ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, DrawTextures& stages) {

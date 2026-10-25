@@ -46,6 +46,8 @@ constexpr uint32_t kFmvScales[] = {0, 1};
 const char* const kFmvScaleNames[] = {"FILL", "4:3"};
 constexpr uint32_t kColourBlindModes[] = {0, 1, 2, 3};
 const char* const kColourBlindNames[] = {"OFF", "PROTANOPIA", "DEUTERANOPIA", "TRITANOPIA"};
+constexpr uint32_t kDumpFormats[] = {0, 1};
+const char* const kDumpFormatNames[] = {"PNG", "DDS"};
 constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
                                       audio::kOutputSurround};
 const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
@@ -314,7 +316,8 @@ enum RowId {
     kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss, kFreeLookSensitivity, kWeaponSensitivity,
     kSniperSensitivity, kFmvScale, kColourBlind, kAimHorizontal, kAimVertical, kInvertMouseX, kInvertPadX, kInvertPadY,
     kSensitivityVertical, kPadDeadZone, kPadHorizontal, kPadVertical, kPadAimHorizontal, kPadAimVertical,
-    kVibration, kGyroAiming, kGyroSensitivity, kGyroAxis, kGyroButton, kGyroButtonMode, kGyroRecenter, kGyroCalibrate
+    kVibration, kGyroAiming, kGyroSensitivity, kGyroAxis, kGyroButton, kGyroButtonMode, kGyroRecenter, kGyroCalibrate,
+    kTextureReplacement, kTextureDumping, kDumpFormat
 };
 
 using rows::Kind;
@@ -371,6 +374,10 @@ constexpr Row kSettingsRows[] = {
     {Kind::Heading, -1, "INPUT DEVICES"},
     {Kind::Value, kPlayer1, "PLAYER 1"},
     {Kind::Value, kPlayer2, "PLAYER 2"},
+    {Kind::Heading, -1, "TEXTURES"},
+    {Kind::Value, kTextureReplacement, "TEXTURE REPLACEMENT"},
+    {Kind::Value, kTextureDumping, "TEXTURE DUMPING"},
+    {Kind::Value, kDumpFormat, "DUMP FORMAT"},
 };
 
 const std::vector<Row>& InputRows() {
@@ -427,9 +434,11 @@ const std::vector<Row>& PadRows() {
 // shader model 3.0 features
 bool ShaderModel3Row(int id) { return id == kHdr || id == kToneMapping; }
 
-// shown dimmed and left as it is: a shader model 3.0 feature at 1.1, HDR output without an HDR display
+// shown dimmed and left as it is: a shader model 3.0 feature at 1.1, HDR output without an HDR display, the dump
+// format while dumping is off
 bool Greyed(int id) {
     if (id == kHdrOutput) return !g_hdr_display;
+    if (id == kDumpFormat) return !Get().dump_textures;
     return ShaderModel3Row(id) && Get().shader_model < 3;
 }
 
@@ -450,6 +459,8 @@ bool* ToggleFlag(Settings& s, int id) {
         case kInvertPadX: return &s.invert_pad_x;
         case kInvertPadY: return &s.invert_pad_y;
         case kGyroAiming: return &s.gyro.enabled;
+        case kTextureReplacement: return &s.custom_textures;
+        case kTextureDumping: return &s.dump_textures;
         default: return nullptr;
     }
 }
@@ -608,6 +619,11 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
             if (step) s.shadow_filter = StepIndex(s.shadow_filter >= 3, step, 2) ? 3 : 1;
             std::snprintf(text, sizeof(text), "%s", s.shadow_filter >= 3 ? "SM3 SOFT" : "SM1.1 (DEFAULT)");
             return true;
+        case kDumpFormat: {
+            int format = StepTable(kDumpFormats, s.texture_dump_format, step);
+            std::snprintf(text, sizeof(text), "%s", kDumpFormatNames[format]);
+            return true;
+        }
         default:
             return false;
     }
@@ -1168,6 +1184,12 @@ bool MenuOpen() { return g_open.load(std::memory_order_relaxed); }
 uint32_t SettingsRevision() { return g_revision; }
 
 bool Capturing() { return g_capture >= 0; }
+
+void ToggleTextureReplacement() {
+    std::lock_guard lock(UiLock());
+    Get().custom_textures = !Get().custom_textures;
+    Changed(false);
+}
 
 void ToggleMenu() {
     bool open = !g_open.load(std::memory_order_relaxed);
