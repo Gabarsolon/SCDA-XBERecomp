@@ -44,6 +44,8 @@ constexpr uint32_t kAoValues[] = {0, 1, 2};
 const char* const kAoNames[] = {"OFF", "SSAO", "GTAO"};
 constexpr uint32_t kFmvScales[] = {0, 1};
 const char* const kFmvScaleNames[] = {"FILL", "4:3"};
+constexpr uint32_t kColourBlindModes[] = {0, 1, 2, 3};
+const char* const kColourBlindNames[] = {"OFF", "PROTANOPIA", "DEUTERANOPIA", "TRITANOPIA"};
 constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
                                       audio::kOutputSurround};
 const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
@@ -303,7 +305,7 @@ enum RowId {
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
     kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss, kFreeLookSensitivity, kWeaponSensitivity,
-    kSniperSensitivity, kFmvScale
+    kSniperSensitivity, kFmvScale, kColourBlind
 };
 
 using rows::Kind;
@@ -333,6 +335,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
     {Kind::Value, kFmvScale, "FMV SCALE"},
+    {Kind::Value, kColourBlind, "COLOUR BLIND MODE"},
     {Kind::Heading, -1, "GRAPHICS"},
     {Kind::Value, kShaderModel, "SHADER MODEL"},
     {Kind::Value, kHdr, "HDR RENDERING"},
@@ -499,6 +502,11 @@ bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
         case kFmvScale:
             std::snprintf(text, sizeof(text), "%s", kFmvScaleNames[StepTable(kFmvScales, s.fmv_scale, step)]);
             return true;
+        case kColourBlind: {
+            int mode = StepTable(kColourBlindModes, s.colour_blind, step);
+            std::snprintf(text, sizeof(text), "%s", kColourBlindNames[mode]);
+            return true;
+        }
         case kFov:
             // 45 to 140 in steps of 1
             if (step) s.fov = uint32_t(StepRange(int(s.fov), 45, 140, 1, step));
