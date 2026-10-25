@@ -104,10 +104,17 @@ void Load() {
     s.ambient_occlusion = std::min(t["ambient_occlusion"].value_or(s.ambient_occlusion), 2u);
     s.async_shaders = t["async_shaders"].value_or(s.async_shaders);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
+    // absent in files from before the split: the one sensitivity they had
+    s.mouse_vertical_sensitivity = float(t["mouse_vertical_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
+    s.invert_mouse_x = t["invert_mouse_x"].value_or(s.invert_mouse_x);
+    s.invert_pad_x = t["invert_pad_x"].value_or(s.invert_pad_x);
+    s.invert_pad_y = t["invert_pad_y"].value_or(s.invert_pad_y);
     s.free_look_sensitivity = float(t["free_look_sensitivity"].value_or(double(s.free_look_sensitivity)));
     s.weapon_sensitivity = float(t["weapon_sensitivity"].value_or(double(s.weapon_sensitivity)));
     s.sniper_sensitivity = float(t["sniper_sensitivity"].value_or(double(s.sniper_sensitivity)));
+    s.aim_horizontal_sensitivity = float(t["aim_horizontal_sensitivity"].value_or(double(s.aim_horizontal_sensitivity)));
+    s.aim_vertical_sensitivity = float(t["aim_vertical_sensitivity"].value_or(double(s.aim_vertical_sensitivity)));
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
     s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
     std::string language = t["language"].value_or(s.language);
@@ -167,10 +174,16 @@ toml::table Table() {
                   {"ambient_occlusion", int64_t(s.ambient_occlusion)},
                   {"async_shaders", s.async_shaders},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
+                  {"mouse_vertical_sensitivity", double(s.mouse_vertical_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
+                  {"invert_mouse_x", s.invert_mouse_x},
+                  {"invert_pad_x", s.invert_pad_x},
+                  {"invert_pad_y", s.invert_pad_y},
                   {"free_look_sensitivity", double(s.free_look_sensitivity)},
                   {"weapon_sensitivity", double(s.weapon_sensitivity)},
                   {"sniper_sensitivity", double(s.sniper_sensitivity)},
+                  {"aim_horizontal_sensitivity", double(s.aim_horizontal_sensitivity)},
+                  {"aim_vertical_sensitivity", double(s.aim_vertical_sensitivity)},
                   {"skip_intros", s.skip_intros},
                   {"pause_on_focus_loss", s.pause_on_focus_loss},
                   {"language", s.language},

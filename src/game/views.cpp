@@ -159,6 +159,7 @@ void UpdateView(uint32_t viewport) {
     input::SetView(view, zoom_speed);
     input::SetInteractReloads(InteractReloads(pc, state));
     input::SetTargeting(Targeting(state) || GentleMove(state));
+    input::SetAiming(Targeting(state) || sniping);
     input::SetCarrying(state == unreal::Name("s_Carry"));
     input::SetHanging(state == unreal::Name("s_Ledge"));
     input::SetLadder(state == unreal::Name("s_NarrowLadder"), R32(pc + kTransition) & kTransitionBit);

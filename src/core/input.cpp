@@ -170,6 +170,7 @@ constexpr float kVersusDeadZone = 0.2f;
 constexpr float kVersusFloor = 18001.0f / kStickMax;
 std::atomic<int> g_speed{4};
 std::atomic<bool> g_targeting{false};
+std::atomic<bool> g_aiming{false};
 
 std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
 
@@ -915,8 +916,11 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
     // not plain negation: -32768 has no positive
     g.sThumbLX = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
     g.sThumbLY = SHORT(-1 - SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY));
-    g.sThumbRX = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX);
-    g.sThumbRY = SHORT(-1 - SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY));
+    SHORT rx = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX);
+    SHORT ry = SHORT(-1 - SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY));
+    const app::Settings& s = app::Get();
+    g.sThumbRX = s.invert_pad_x ? SHORT(-1 - rx) : rx;
+    g.sThumbRY = s.invert_pad_y ? SHORT(-1 - ry) : ry;
     return true;
 }
 
@@ -1100,9 +1104,11 @@ bool TakeMouse(float& dx, float& dy) {
     if ((!x && !y) || !Active() || (Pointing() && !MapDrag())) return false;
     const app::Settings& s = app::Get();
     // versus has a sensitivity per view instead (versus/mouse.cpp)
-    float sensitivity = kVersus ? 1.0f : s.mouse_sensitivity;
-    dx = float(x) * sensitivity;
-    dy = float(s.invert_mouse ? -y : y) * sensitivity;
+    float horizontal = kVersus ? 1.0f : s.mouse_sensitivity;
+    float vertical = kVersus ? 1.0f : s.mouse_vertical_sensitivity;
+    bool aim = g_aiming && !kVersus;
+    dx = float(s.invert_mouse_x ? -x : x) * horizontal * (aim ? s.aim_horizontal_sensitivity : 1.0f);
+    dy = float(s.invert_mouse ? -y : y) * vertical * (aim ? s.aim_vertical_sensitivity : 1.0f);
     return true;
 }
 
@@ -1231,6 +1237,10 @@ void SetInteractReloads(bool on) {
 
 void SetTargeting(bool on) {
     g_targeting = on;
+}
+
+void SetAiming(bool on) {
+    g_aiming = on;
 }
 
 void SetCarrying(bool on) {

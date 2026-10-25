@@ -54,12 +54,19 @@ struct Settings {
     bool tone_mapping = false;
     uint32_t ambient_occlusion = 0;  // screen space, from the scene's depth: 0 off, 1 SSAO, 2 GTAO
     bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
-    float mouse_sensitivity = 1.0f;
-    bool invert_mouse = false;
+    float mouse_sensitivity = 1.0f;  // horizontal
+    float mouse_vertical_sensitivity = 1.0f;
+    bool invert_mouse = false;  // the Y axis
+    bool invert_mouse_x = false;
+    bool invert_pad_x = false;  // the right stick
+    bool invert_pad_y = false;
     // versus only, in place of mouse_sensitivity: third person, weapon raised, sniper scope
     float free_look_sensitivity = 1.0f;
     float weapon_sensitivity = 1.0f;
     float sniper_sensitivity = 1.0f;
+    // aiming a weapon or through a scope, times the sensitivity above
+    float aim_horizontal_sensitivity = 1.0f;
+    float aim_vertical_sensitivity = 1.0f;
     bool skip_intros = false;        // logos video and rating screen at boot
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
     std::string language = "auto";   // "auto" (the Windows display language) or one of kLanguages

@@ -96,6 +96,8 @@ void SetTrainingVideo(bool on);
 void SetInteractReloads(bool on);
 // aiming, the EEV, a scope: the slowest walking speed stays past m_gentleForce, the least these move at
 void SetTargeting(bool on);
+// aiming a weapon or through the sniper scope: the mouse takes the aim sensitivities
+void SetAiming(bool on);
 // carrying a body: the keyboard's alt fire drops it (DropBody), as SCCT PC's s_Carry ProcessAltFire, not the pad's LT
 void SetCarrying(bool on);
 // hanging from a ledge (s_Ledge): the move backward key, with no strafe key held, holds B (crouch) and drops, as SCCT PC

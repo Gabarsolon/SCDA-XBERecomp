@@ -123,15 +123,18 @@ float Rate(float counts, float seconds) {
     return g_binoculars ? rate * kBinocularSpeed : rate;
 }
 
+bool WeaponRaised(uint32_t controller) {
+    uint32_t frame = R32(controller + kStateFrame);
+    uint32_t state = frame ? R32(frame + kStateNode) : 0;
+    uint32_t name = state ? R32(state + kName) : 0;
+    return std::find(std::begin(kWeaponStates), std::end(kWeaponStates), name) != std::end(kWeaponStates);
+}
+
 // the sensitivity of the player's view: the sniper scope, the weapon raised, else free look
 float ViewSensitivity(uint32_t controller) {
     const app::Settings& s = app::Get();
     if (g_binoculars) return s.sniper_sensitivity;
-    uint32_t frame = R32(controller + kStateFrame);
-    uint32_t state = frame ? R32(frame + kStateNode) : 0;
-    uint32_t name = state ? R32(state + kName) : 0;
-    bool weapon = std::find(std::begin(kWeaponStates), std::end(kWeaponStates), name) != std::end(kWeaponStates);
-    return weapon ? s.weapon_sensitivity : s.free_look_sensitivity;
+    return WeaponRaised(controller) ? s.weapon_sensitivity : s.free_look_sensitivity;
 }
 
 // the rate, and the axis it would have come from
@@ -602,8 +605,10 @@ X86_FUNC(sub_0003FB80) {
     // the stick's up is positive, the mouse's is negative
     bool invert = R32(controller + kOptions) & kInvertLook;
     float view = ViewSensitivity(controller);
-    float turn = Rate(g_dx, seconds) * view;
-    float up = Rate(-g_dy, seconds) * view;
+    const app::Settings& s = app::Get();
+    bool aim = g_binoculars || WeaponRaised(controller);
+    float turn = Rate(g_dx, seconds) * view * (aim ? s.aim_horizontal_sensitivity : 1.0f);
+    float up = Rate(-g_dy, seconds) * view * (aim ? s.aim_vertical_sensitivity : 1.0f);
     if (turn != 0.0f) Look(controller + kTurnRate, controller + kTurn, controller + kTurnMax, turn, false);
     if (up != 0.0f) Look(controller + kLookRate, controller + kLookUp, controller + kLookMax, up, invert);
     // the binoculars turn by the rates' direction times this magnitude, so it is left above full stick there

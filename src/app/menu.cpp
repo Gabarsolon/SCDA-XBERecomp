@@ -305,7 +305,8 @@ enum RowId {
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
     kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss, kFreeLookSensitivity, kWeaponSensitivity,
-    kSniperSensitivity, kFmvScale, kColourBlind
+    kSniperSensitivity, kFmvScale, kColourBlind, kAimHorizontal, kAimVertical, kInvertMouseX, kInvertPadX, kInvertPadY,
+    kSensitivityVertical
 };
 
 using rows::Kind;
@@ -370,8 +371,13 @@ const std::vector<Row>& InputRows() {
                                    {Kind::Value, kWeaponSensitivity, "WEAPON SENSITIVITY"},
                                    {Kind::Value, kSniperSensitivity, "SNIPER SENSITIVITY"}});
         else
-            out.push_back({Kind::Value, kSensitivity, "MOUSE SENSITIVITY"});
-        out.insert(out.end(), {{Kind::Value, kInvertMouse, "INVERT MOUSE"}, {Kind::Heading, -1, "KEYBOARD"}});
+            out.insert(out.end(), {{Kind::Value, kSensitivity, "MOUSE HORIZONTAL SENSITIVITY"},
+                                   {Kind::Value, kSensitivityVertical, "MOUSE VERTICAL SENSITIVITY"}});
+        out.insert(out.end(), {{Kind::Value, kAimHorizontal, "AIM HORIZONTAL SENSITIVITY"},
+                               {Kind::Value, kAimVertical, "AIM VERTICAL SENSITIVITY"},
+                               {Kind::Value, kInvertMouseX, "INVERT X AXIS"},
+                               {Kind::Value, kInvertMouse, "INVERT Y AXIS"},
+                               {Kind::Heading, -1, "KEYBOARD"}});
         size_t count = 0;
         const input::Action* actions = input::Actions(&count);
         for (size_t i = 0; i < count; i++) out.push_back({Kind::Bind, int(i), actions[i].label});
@@ -382,7 +388,10 @@ const std::vector<Row>& InputRows() {
 
 const std::vector<Row>& PadRows() {
     static const std::vector<Row> list = [] {
-        std::vector<Row> out;
+        std::vector<Row> out = {{Kind::Heading, -1, "GENERAL"},
+                                {Kind::Value, kInvertPadX, "INVERT X AXIS"},
+                                {Kind::Value, kInvertPadY, "INVERT Y AXIS"},
+                                {Kind::Heading, -1, "BUTTONS"}};
         size_t count = 0;
         const input::Action* actions = input::PadActions(&count);
         for (size_t i = 0; i < count; i++) out.push_back({Kind::PadBind, int(i), actions[i].label});
@@ -413,6 +422,9 @@ bool* ToggleFlag(Settings& s, int id) {
         case kPauseOnFocusLoss: return &s.pause_on_focus_loss;
         case kPushToTalk: return &s.push_to_talk;
         case kInvertMouse: return &s.invert_mouse;
+        case kInvertMouseX: return &s.invert_mouse_x;
+        case kInvertPadX: return &s.invert_pad_x;
+        case kInvertPadY: return &s.invert_pad_y;
         default: return nullptr;
     }
 }
@@ -576,6 +588,19 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
 }
 
 // the general, input device and mouse rows that are no ON / OFF, stepped first
+// the setting a sensitivity row steps
+float& Sensitivity(Settings& s, int id) {
+    switch (id) {
+        case kSensitivityVertical: return s.mouse_vertical_sensitivity;
+        case kFreeLookSensitivity: return s.free_look_sensitivity;
+        case kWeaponSensitivity: return s.weapon_sensitivity;
+        case kSniperSensitivity: return s.sniper_sensitivity;
+        case kAimHorizontal: return s.aim_horizontal_sensitivity;
+        case kAimVertical: return s.aim_vertical_sensitivity;
+        default: return s.mouse_sensitivity;
+    }
+}
+
 void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
     switch (id) {
         case kLanguage: {
@@ -612,13 +637,13 @@ void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
             break;
         }
         case kSensitivity:
+        case kSensitivityVertical:
         case kFreeLookSensitivity:
         case kWeaponSensitivity:
-        case kSniperSensitivity: {
-            float& v = id == kSensitivity          ? s.mouse_sensitivity
-                       : id == kFreeLookSensitivity ? s.free_look_sensitivity
-                       : id == kWeaponSensitivity   ? s.weapon_sensitivity
-                                                    : s.sniper_sensitivity;
+        case kSniperSensitivity:
+        case kAimHorizontal:
+        case kAimVertical: {
+            float& v = Sensitivity(s, id);
             // 0.1 to 5.0 in steps of 0.1
             if (step) v = float(StepRange(int(std::lround(v * 10.0f)), 1, 50, 1, step)) / 10.0f;
             std::snprintf(text, sizeof(text), "%.1f", v);
@@ -659,24 +684,34 @@ constexpr int kLevelsPage = 3;
 
 void RestoreDefaults(int page) {
     if (page == kControllerPage) {
+        Get().invert_pad_x = false;
+        Get().invert_pad_y = false;
         input::ResetPadBindings();
         return;
     }
     if (page == kKeyboardPage) {
         Settings& s = Get();
-        s.mouse_sensitivity = Settings{}.mouse_sensitivity;
+        s.mouse_sensitivity = s.mouse_vertical_sensitivity = 1.0f;
         s.free_look_sensitivity = s.weapon_sensitivity = s.sniper_sensitivity = 1.0f;
+        s.aim_horizontal_sensitivity = s.aim_vertical_sensitivity = 1.0f;
         s.invert_mouse = false;
+        s.invert_mouse_x = false;
         input::ResetBindings();
         return;
     }
     Settings keep = Get();
     Get() = Settings{};
     Get().mouse_sensitivity = keep.mouse_sensitivity;
+    Get().mouse_vertical_sensitivity = keep.mouse_vertical_sensitivity;
     Get().free_look_sensitivity = keep.free_look_sensitivity;
     Get().weapon_sensitivity = keep.weapon_sensitivity;
     Get().sniper_sensitivity = keep.sniper_sensitivity;
+    Get().aim_horizontal_sensitivity = keep.aim_horizontal_sensitivity;
+    Get().aim_vertical_sensitivity = keep.aim_vertical_sensitivity;
     Get().invert_mouse = keep.invert_mouse;
+    Get().invert_mouse_x = keep.invert_mouse_x;
+    Get().invert_pad_x = keep.invert_pad_x;
+    Get().invert_pad_y = keep.invert_pad_y;
     Get().keys = keep.keys;
     Get().pad_buttons = keep.pad_buttons;
     Changed(true);
