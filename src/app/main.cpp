@@ -273,10 +273,7 @@ void Pace() {
     using clock = std::chrono::steady_clock;
     static clock::time_point next = clock::now();
     uint32_t cap = Get().fps_cap;
-    // a few under the refresh rate, so a variable refresh display stays in its range and vsync never waits a whole
-    // refresh
-    constexpr uint32_t kRefreshMargin = 3;
-    if (cap == kFpsCapRefresh) cap = RefreshRate() > kRefreshMargin ? RefreshRate() - kRefreshMargin : 0;
+    if (cap == kFpsCapRefresh) cap = RefreshRate();
     if (std::string_view(IMAGE_XBE) == "sc4_adv.xbe" && (!cap || cap > kVersusMaxFps)) cap = kVersusMaxFps;
     auto now = clock::now();
     if (!cap) {

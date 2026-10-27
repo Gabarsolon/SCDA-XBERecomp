@@ -16,7 +16,7 @@ struct X86Context;
 namespace app {
 
 inline constexpr int kVersion = 2;  // release number, the GitHub release tag is V<number>
-inline constexpr uint32_t kFpsCapRefresh = 1;  // fps_cap: just under the monitor's refresh rate
+inline constexpr uint32_t kFpsCapRefresh = 1;  // fps_cap: the monitor's refresh rate
 // versus tops out here whatever fps_cap says, as SCCT PC versus, so a player's net traffic stays bounded
 inline constexpr uint32_t kVersusMaxFps = 240;
 
