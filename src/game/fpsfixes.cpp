@@ -83,7 +83,24 @@ constexpr uint32_t kMaxFrameRate = 0xAC, kAccumulator = 0xB0;  // UTexture
 constexpr uint32_t kScroll = 0x6A94EC, kViewport = 0x1D0, kViewActor = 0x34;
 constexpr float kScrollStep = 0.005f;
 
+// Dynamic water steps its ripples by a fixed 0.033 s every tick, so they race past 30 fps.
+std::unordered_map<uint32_t, float> g_water_time;
+
 }  // namespace
+
+// UEDynamicWater update, thiscall, run by its water actor's tick
+X86_EXTERN_FUNC(__imp__sub_00178798);
+X86_FUNC(sub_00178798) {
+    uint32_t water = ctx.ecx;
+    float& time = g_water_time[water];
+    time += std::clamp(GF(R32(R32(water + kOwner) + kLevel) + kDeltaSeconds), 0.0f, kMaxDelta);
+    if (time < kFixedStep) {
+        ctx.esp += 4;  // ret, skipped this frame
+        return;
+    }
+    time = std::min(time - kFixedStep, kFixedStep);
+    __imp__sub_00178798(ctx, base);
+}
 
 // night vision pass, thiscall
 X86_EXTERN_FUNC(__imp__sub_002F157B);
