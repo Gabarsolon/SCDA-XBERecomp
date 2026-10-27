@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -117,7 +118,7 @@ float4 psmain(O i) : SV_Target {
 
 // the HDR resolve: exposure, bloom of what passes white, tone mapping
 const char* kPostHlsl = R"(
-cbuffer P : register(b1) { float4 p0; float4 p1; };
+cbuffer P : register(b1) { float4 p0; float4 p1; float4 p2; };
 Texture2D src : register(t0);
 Texture2D bloom : register(t1);
 Texture2D<float> expo : register(t2);
@@ -130,20 +131,26 @@ O vs(uint id : SV_VertexID) {
     o.uv = t;
     return o;
 }
-static const float3 kLum = float3(0.2126, 0.7152, 0.0722);
-// p0: headroom, key, lowest and highest exposure; the log average luminance over a grid
+static const float3 kLum = float3(0.3, 0.59, 0.11);
+// Chaos Theory's eye adaptation, the scale the scene goes to. p0: headroom, glow strength, glow start, brightness
+// max; p1: brightness min, dark end, normal start, normal end; p2: bright start, dark, normal and bright scale
 float exposure(O i) : SV_Target {
     float s = 0;
     for (int y = 0; y < 18; y++)
-        for (int x = 0; x < 32; x++)
-            s += log(max(dot(src.SampleLevel(ls, (float2(x, y) + 0.5) / float2(32, 18), 0).rgb * p0.x, kLum), 1e-3));
-    return clamp(p0.y / exp(s / 576), p0.z, p0.w);
+        for (int x = 0; x < 32; x++) {
+            float3 c = src.SampleLevel(ls, (float2(x, y) + 0.5) / float2(32, 18), 0).rgb * p0.x;
+            float lit = dot(min(c, 1) + max(c - 1 - p0.z, 0) * p0.y, kLum);
+            s += log2(clamp(p0.w - lit, p1.x, p0.w));
+        }
+    float l = p0.w - exp2(s / 576);
+    if (l >= p1.w) return lerp(p2.z, p2.w, saturate((l - p1.w) / (p2.x - p1.w)));
+    return lerp(p2.y, p2.z, saturate((l - p1.y) / (p1.z - p1.y)));
 }
-// p1: source texel; a quarter size copy of what passes 1 after exposure
+// p1: source texel; a quarter size copy of what passes 1
 float4 bright(O i) : SV_Target {
     float3 c = 0;
     for (int k = 0; k < 4; k++) c += src.SampleLevel(ls, i.uv + p1.xy * float2(k & 1 ? 1 : -1, k & 2 ? 1 : -1), 0).rgb;
-    return float4(max(c * 0.25 * p0.x * expo.Load(int3(0, 0, 0)) - 1, 0), 1);
+    return float4(max(c * 0.25 * p0.x - 1, 0), 1);
 }
 // p1: step; 9 gaussian taps in 5 bilinear reads
 float4 blur(O i) : SV_Target {
@@ -152,18 +159,11 @@ float4 blur(O i) : SV_Target {
     c += (src.SampleLevel(ls, i.uv + p1.xy * 3.230769, 0).rgb + src.SampleLevel(ls, i.uv - p1.xy * 3.230769, 0).rgb) * 0.070270;
     return float4(c, 1);
 }
-// p0: headroom, tone mapping, bloom strength; linear up to the knee, highlights roll off towards white
+// p0: headroom, bloom strength; scene and glow times the exposure scale, clipped as Chaos Theory's
 float4 tone(O i) : SV_Target {
     float4 s = src.Load(int3(i.p.xy, 0));
-    float3 c = s.rgb * p0.x, b = bloom.SampleLevel(ls, i.uv, 0).rgb * p0.z;
-    if (p0.y > 0) {
-        const float a = 0.75;
-        c = c * expo.Load(int3(0, 0, 0)) + b;
-        c = min(c, a) + (1 - a) * (1 - exp(min(a - c, 0) / (1 - a)));
-    } else {
-        c += b;
-    }
-    return float4(saturate(c), s.a);
+    float3 c = s.rgb * p0.x + bloom.SampleLevel(ls, i.uv, 0).rgb * p0.y;
+    return float4(saturate(c * expo.Load(int3(0, 0, 0))), s.a);
 }
 )";
 
@@ -808,7 +808,7 @@ private:
     Readable ReadableResource(Target& t);
     uint32_t Samples(uint32_t want);
     void EnterHdr(Target& t);
-    bool DrawPostPass(const char* entry, const PostTarget& out, const PostInputs& in, const float p[8],
+    bool DrawPostPass(const char* entry, const PostTarget& out, const PostInputs& in, std::span<const float> p,
                       const PostOptions& o = {});
     ID3D12PipelineState* EnsurePostPipeline(const char* entry, const PostTarget& out, const PostOptions& o);
     D3D12_CPU_DESCRIPTOR_HANDLE PostRtv(uint32_t i);
@@ -818,7 +818,7 @@ private:
     void Resolve(Target& t);
     bool EnsureBloomTargets(uint32_t bw, uint32_t bh);
     bool EnsureExposureTarget();
-    float UpdateExposureBlend();
+    float UpdateExposureBlend(float adaptation_time);
     void DrawBloom(const PostInputs& in, const Target& t, uint32_t bw, uint32_t bh);
     // Smaa, then its steps in call order, each callee right after its caller
     struct SmaaLookup {
@@ -1874,8 +1874,8 @@ ID3D12PipelineState* D3D12Backend::EnsurePostPipeline(const char* entry, const P
     return pso.Get();
 }
 
-bool D3D12Backend::DrawPostPass(const char* entry, const PostTarget& out, const PostInputs& in, const float p[8],
-                                const PostOptions& o) {
+bool D3D12Backend::DrawPostPass(const char* entry, const PostTarget& out, const PostInputs& in,
+                                std::span<const float> p, const PostOptions& o) {
     ID3D12PipelineState* pso = EnsurePostPipeline(entry, out, o);
     if (!pso) return false;
     uint32_t slot = AllocSrvSlots(4);
@@ -1888,7 +1888,7 @@ bool D3D12Backend::DrawPostPass(const char* entry, const PostTarget& out, const 
         dev_->CreateShaderResourceView(i < 3 ? in.res[i] : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     Alloc cb = Upload(256, 256);
-    std::memcpy(cb.cpu, p, 8 * sizeof(float));
+    std::memcpy(cb.cpu, p.data(), p.size_bytes());
     cl_->OMSetRenderTargets(1, &out.rtv, FALSE, nullptr);
     SetFullViewport(out.w, out.h);
     if (o.blend >= 0) {
@@ -1947,16 +1947,39 @@ void D3D12Backend::EnterHdr(Target& t) {
     t.hdr = true;
 }
 
-// HDR resolve: bloom at a quarter of the target, exposure adapting over about a second
+// HDR resolve: bloom at a quarter of the target, exposure adapting as Chaos Theory's tone mapping
 constexpr uint32_t kBloomShrink = 4;
 constexpr DXGI_FORMAT kBloomFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 constexpr DXGI_FORMAT kExposureFormat = DXGI_FORMAT_R16_FLOAT;
-constexpr float kExposureRate = 1.5f;     // per second
-constexpr float kExposureMaxStep = 0.25f;  // longest frame time one step follows, in seconds
-constexpr float kExposureKey = 0.4f;       // the average luminance exposure aims for
-constexpr float kLowestExposure = 0.7f;    // under tone mapping; without it exposure stays at the highest
-constexpr float kHighestExposure = 1.0f;
 constexpr float kBloomStrength = 0.6f;
+
+// a level's Tonemapping settings, glow start out of 255
+struct ToneMapPreset {
+    float adaptation_time;
+    float glow_strength;
+    float glow_start;
+    float dark_scale;
+    float normal_scale;
+    float bright_scale;
+    float dark_end;
+    float normal_start;
+    float normal_end;
+    float bright_start;
+    float brightness_max;
+    float brightness_min;
+    float initial_scale;
+};
+// Double Agent's levels: Tonemapping and Tonemapping_NV
+constexpr ToneMapPreset kToneMap = {0.75f, 256, 16, 1.5f, 1.0f, 0.5f, 0.05f, 0.2f, 0.6f, 1.2f, 16, 0.01f, 1.5f};
+constexpr ToneMapPreset kToneMapNv = {0.8f, 256, 16, 1.0f, 0.6f, 0.4f, 0.0f, 0.05f, 0.2f, 0.35f, 16, 0.01f, 2.4f};
+// tone mapping off: every scale 1
+constexpr ToneMapPreset kNoToneMap = {0.75f, 256, 16, 1, 1, 1, 0.05f, 0.2f, 0.6f, 1.2f, 16, 0.01f, 1};
+
+// the preset tone mapping follows this frame
+const ToneMapPreset& CurrentToneMap(bool tone) {
+    if (!tone) return kNoToneMap;
+    return g_night_vision ? kToneMapNv : kToneMap;
+}
 
 D3D12_CPU_DESCRIPTOR_HANDLE D3D12Backend::PostRtv(uint32_t i) {
     return Cpu(rtv_heap_.Get(), post_rtv_ + i, rtv_inc_);
@@ -1991,19 +2014,16 @@ bool D3D12Backend::EnsureBloomTargets(uint32_t bw, uint32_t bh) {
 bool D3D12Backend::EnsureExposureTarget() {
     if (expo_) return true;
     if (!CreatePostTarget(expo_, expo_state_, kExposureFormat, 1, 1, kExposureRtv)) return false;
-    // new memory can hold NaN, which the blend would keep forever
-    float one[4] = {1, 1, 1, 1};
-    cl_->ClearRenderTargetView(PostRtv(kExposureRtv), one, 0, nullptr);
     expo_fresh_ = true;
     return true;
 }
 
 // how far this frame's exposure moves towards the scene's, as a blend factor
-float D3D12Backend::UpdateExposureBlend() {
+float D3D12Backend::UpdateExposureBlend(float adaptation_time) {
     auto now = std::chrono::steady_clock::now();
-    float dt = std::clamp(std::chrono::duration<float>(now - expo_t_).count(), 0.0f, kExposureMaxStep);
+    float dt = std::max(std::chrono::duration<float>(now - expo_t_).count(), 0.0f);
     expo_t_ = now;
-    float a = expo_fresh_ ? 1.0f : 1.0f - std::exp(-dt * kExposureRate);
+    float a = expo_fresh_ ? 0.0f : std::min(dt / adaptation_time, 1.0f);
     expo_fresh_ = false;
     return a;
 }
@@ -2039,18 +2059,25 @@ void D3D12Backend::Resolve(Target& t) {
     uint32_t bh = std::max(1u, t.h / kBloomShrink);
     if (!EnsureBloomTargets(bw, bh)) return;
     if (!EnsureExposureTarget()) return;
-    float a = UpdateExposureBlend();
-    PostInputs in{{fb, nullptr, nullptr}, {t.fmt, kBloomFormat, kExposureFormat}};
+    const ToneMapPreset& tm = CurrentToneMap(tone_);
     Transition(expo_.Get(), expo_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    float lowest = tone_ ? kLowestExposure : kHighestExposure;
-    float pe[8] = {kHeadroom, kExposureKey, lowest, kHighestExposure};
+    // also keeps NaN in new memory out of the blend
+    if (expo_fresh_) {
+        float initial[4] = {tm.initial_scale, tm.initial_scale, tm.initial_scale, tm.initial_scale};
+        cl_->ClearRenderTargetView(PostRtv(kExposureRtv), initial, 0, nullptr);
+    }
+    float a = UpdateExposureBlend(tm.adaptation_time);
+    PostInputs in{{fb, nullptr, nullptr}, {t.fmt, kBloomFormat, kExposureFormat}};
+    float pe[12] = {kHeadroom, tm.glow_strength, tm.glow_start / 255, tm.brightness_max,
+                    tm.brightness_min, tm.dark_end, tm.normal_start, tm.normal_end,
+                    tm.bright_start, tm.dark_scale, tm.normal_scale, tm.bright_scale};
     DrawPostPass("exposure", {PostRtv(kExposureRtv), kExposureFormat, 1, 1}, in, pe, {.blend = a});
     Transition(expo_.Get(), expo_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     in.res[2] = expo_.Get();
     DrawBloom(in, t, bw, bh);
     in.res[1] = bloom_[0].Get();
     Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    float pt[8] = {kHeadroom, tone_ ? 1.0f : 0.0f, kBloomStrength, 0};
+    float pt[8] = {kHeadroom, kBloomStrength};
     DrawPostPass("tone", {Cpu(rtv_heap_.Get(), t.view, rtv_inc_), t.fmt, t.w, t.h, t.samples}, in, pt);
 }
 
